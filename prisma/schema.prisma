@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  CONSULTANT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  INACTIVE
+  PENDING_VERIFICATION
+}
+
+enum MessageType {
+  TEXT
+  LINK
+  FILE
+  IMAGE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+}
+
+enum InterestedIn {
+  MALE
+  FEMALE
+  EVERYONE
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  NOT_SUBMITTED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PREMIUM
+  PRO
+}
+
+model User {
+  id                    String     @id @default(auto()) @map("_id") @db.ObjectId
+  name                  String
+  email                 String     @unique
+  password              String?
+  dateOfBirth           String?
+  role                  Role       @default(USER)
+  userStatus            UserStatus @default(ACTIVE)
+  location              String?    // e.g., "Dhaka, Bangladesh"
+  profilePicture        String?
+  phone                 String?    // Updated from phoneNumber to match mobile app
+  description           String?    // User bio/description
+  expertise             String?    // Professional expertise
+  availability          String?    // Availability schedule
+  hourlyRate            Float?     // Hourly rate for services
+  isSocial              Boolean    @default(false)
+  isVerified            Boolean    @default(false)
+  resetPasswordToken    String?    // For password reset functionality
+  resetPasswordExpires  DateTime?  // Token expiry time
+  
+  // New fields for mobile app registration flow
+  gender                Gender?
+  interestedIn          InterestedIn?
+  distancePreference    Int?       // Distance preference in km
+  bio                   String?    // Short bio (max 200 characters)
+  
+  // Profile photos
+  profilePhotos         String[]   // Array of photo URLs (1-4 photos)
+  mainProfilePhoto      String?    // Main profile photo URL
+  
+  // Voice introduction
+  voiceIntroduction     String?    // Voice recording URL
+  voiceIntroductionDuration Int?   // Duration in seconds
+  
+  // Verification fields
+  identityVerified      Boolean    @default(false)
+  incomeVerified        Boolean    @default(false)
+  identityDocument      String?    // Government ID document URL
+  incomeDocument        String?    // Income verification document URL
+  identityVerificationStatus VerificationStatus @default(NOT_SUBMITTED)
+  incomeVerificationStatus VerificationStatus @default(NOT_SUBMITTED)
+  
+  // Badge display preferences
+  showIdentityBadge     Boolean    @default(false)
+  showIncomeBadge       Boolean    @default(false)
+  
+  // Stripe integration
+  stripeCustomerId      String?    @unique
+  
+  // OTP and verification
+  phoneOTP              String?
+  phoneOTPExpires       DateTime?
+  emailOTP              String?
+  emailOTPExpires       DateTime?
+  isPhoneVerified       Boolean    @default(false)
+  isEmailVerified       Boolean    @default(false)
+  
+  // Profile completion
+  profileCompletionStep Int        @default(0)  // Track profile completion progress
+  
+  // Subscription
+  subscriptionTier      SubscriptionTier @default(FREE)
+  
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  // Relations
+  sentMessages          Message[]  @relation("SentMessages")
+  receivedMessages      Message[]  @relation("ReceivedMessages")
+  otps                  OTP[]
+  payments              Payment[]
+  subscriptions         SubscriptionUser[]
+
+  @@map("users")
+}
+
+model Message {
+  id                    String     @id @default(auto()) @map("_id") @db.ObjectId
+  senderId              String     @db.ObjectId
+  sender                User       @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId            String     @db.ObjectId
+  receiver              User       @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  content               String
+  messageType           MessageType @default(TEXT)
+  isRead                Boolean    @default(false)
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  @@map("messages")
+}
+
+model OTP {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  otpCode   String
+  hexCode   String
+  expiry    DateTime
+  createdAt DateTime @default(now())
+
+  @@map("otps")
+}
+
+model Plan {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  price       Float
+  duration    Int      // in days
+  features    String[] // Array of feature strings
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  subscriptions SubscriptionUser[]
+
+  @@map("plans")
+}
+
+model Payment {
+  id                String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String        @db.ObjectId
+  user              User          @relation(fields: [userId], references: [id])
+  stripePaymentId   String        @unique
+  amount            Float
+  currency          String        @default("usd")
+  status            PaymentStatus @default(PENDING)
+  paymentMethod     String?
+  description       String?
+  metadata          String?       // JSON string for additional data
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+model SubscriptionUser {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id])
+  stripeSubscriptionId String @unique
+  planId            String   @db.ObjectId
+  plan              Plan     @relation(fields: [planId], references: [id])
+  status            String   // active, canceled, past_due, etc.
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("subscription_users")
+}

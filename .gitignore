@@ -1,0 +1,13 @@
+node_modules
+# Keep environment variables out of version control
+dist
+.vercel
+
+.vercel
+public
+
+.env
+
+.codegpt
+
+/src/generated/prisma
