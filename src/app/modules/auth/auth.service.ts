@@ -7,22 +7,18 @@ import { UserStatus, VerificationStatus } from "../../../generated/prisma";
 import { jwtHelpers } from "../../helpers/jwtHelpers";
 import config from "../../../config";
 import { Secret } from "jsonwebtoken";
-import { OTPFn } from "../../utils/OTPFn";
 import { emailTemplate } from "../../utils/emailNotifications/emailHTML";
+import sentEmailUtility from "../../utils/sentEmailUtility";
+import { S3Uploader } from "../../lib/S3Uploader";
 
 // Step 1: Register with email
 const registerWithEmail = async (payload: {
   email: string;
   password: string;
-  confirmPassword: string;
 }) => {
   const isEmailValid = isValidEmail(payload.email);
   if (!isEmailValid) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Email is not valid");
-  }
-
-  if (payload.password !== payload.confirmPassword) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Password and confirm password do not match");
   }
 
   const existingUser = await prisma.user.findUnique({
@@ -47,10 +43,7 @@ const registerWithEmail = async (payload: {
     select: {
       id: true,
       email: true,
-      name: true,
-      userStatus: true,
       profileCompletionStep: true,
-      createdAt: true,
     },
   });
 
@@ -66,21 +59,302 @@ const registerWithEmail = async (payload: {
 
   // Send email with OTP
   try {
-    await emailTemplate({
-      email: user.email,
-      subject: "Email Verification",
-      html: `
-        <h2>Welcome to VOXA!</h2>
-        <p>Your verification code is: <strong>${emailOTP}</strong></p>
-        <p>This code will expire in 10 minutes.</p>
-      `,
-    });
+    const emailHTML = emailTemplate(emailOTP);
+    await sentEmailUtility(
+      user.email,
+      "Email Verification - VOXA",
+      emailHTML
+    );
   } catch (error) {
     console.error('Error sending email:', error);
   }
 
   return {
     user,
+  };
+};
+
+// Step 1.5: Send email OTP for verification
+const sendEmailOTP = async (payload: {
+  email: string;
+}) => {
+  const isEmailValid = isValidEmail(payload.email);
+  if (!isEmailValid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Email is not valid");
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email: payload.email },
+  });
+
+  if (!existingUser) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found. Please register first.");
+  }
+
+  // Check if user is already verified
+  if (existingUser.userStatus === UserStatus.ACTIVE) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Email is already verified");
+  }
+
+  // Generate OTP
+  const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Update user with new OTP
+  await prisma.user.update({
+    where: { id: existingUser.id },
+    data: {
+      emailOTP,
+      emailOTPExpires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    },
+  });
+
+  // Store email in temporary storage for verification
+  const tempEmailKey = `temp_email_${emailOTP}`;
+  (global as any)[tempEmailKey] = {
+    email: payload.email,
+    expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+  };
+
+  // Send email with OTP
+  try {
+    const emailHTML = emailTemplate(emailOTP);
+    await sentEmailUtility(
+      payload.email,
+      "Email Verification - VOXA",
+      emailHTML
+    );
+  } catch (error) {
+    console.error('Error sending email:', error);
+  }
+
+  return {
+    message: "OTP sent successfully",
+    email: payload.email,
+  };
+};
+
+// Step 1.5: Verify email OTP
+const verifyEmailOTP = async (payload: {
+  otp: string;
+}) => {
+  // Find email from temporary storage using OTP
+  const tempEmailKey = `temp_email_${payload.otp}`;
+  const tempEmailData = (global as any)[tempEmailKey];
+
+  if (!tempEmailData) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid OTP");
+  }
+
+  if (new Date() > tempEmailData.expires) {
+    // Clean up expired data
+    delete (global as any)[tempEmailKey];
+    throw new ApiError(httpStatus.BAD_REQUEST, "OTP has expired");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: tempEmailData.email },
+  });
+
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  if (!user.emailOTP || !user.emailOTPExpires) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "No OTP found");
+  }
+
+  if (new Date() > user.emailOTPExpires) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "OTP has expired");
+  }
+
+  if (user.emailOTP !== payload.otp) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid OTP");
+  }
+
+  // Clear OTP and update user status
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailOTP: null,
+      emailOTPExpires: null,
+      userStatus: UserStatus.ACTIVE,
+      profileCompletionStep: 2, // Email verified, move to next step
+    },
+  });
+
+  // Clean up temporary storage
+  delete (global as any)[tempEmailKey];
+
+  return {
+    message: "Email verified successfully",
+    user: {
+      id: user.id,
+      email: user.email,
+      profileCompletionStep: 2,
+    },
+  };
+};
+
+// Resend email OTP
+const resendEmailOTP = async (payload: {
+  email: string;
+}) => {
+  const isEmailValid = isValidEmail(payload.email);
+  if (!isEmailValid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Email is not valid");
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email: payload.email },
+  });
+
+  if (!existingUser) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found. Please register first.");
+  }
+
+  // Check if user is already verified
+  if (existingUser.userStatus === UserStatus.ACTIVE) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Email is already verified");
+  }
+
+  // Generate new OTP
+  const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Update user with new OTP
+  await prisma.user.update({
+    where: { id: existingUser.id },
+    data: {
+      emailOTP,
+      emailOTPExpires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+    },
+  });
+
+  // Store email in temporary storage for verification
+  const tempEmailKey = `temp_email_${emailOTP}`;
+  (global as any)[tempEmailKey] = {
+    email: payload.email,
+    expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+  };
+
+  // Send email with new OTP
+  try {
+    const emailHTML = emailTemplate(emailOTP);
+    await sentEmailUtility(
+      payload.email,
+      "Email Verification - VOXA (Resent)",
+      emailHTML
+    );
+  } catch (error) {
+    console.error('Error sending email:', error);
+  }
+
+  return {
+    message: "OTP resent successfully",
+    email: payload.email,
+  };
+};
+
+// Change email
+const changeEmail = async (payload: {
+  newEmail: string;
+  currentEmail: string;
+}) => {
+  const isEmailValid = isValidEmail(payload.newEmail);
+  if (!isEmailValid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Email is not valid");
+  }
+
+  // Check if new email is already registered
+  const existingUserWithNewEmail = await prisma.user.findUnique({
+    where: { email: payload.newEmail },
+  });
+
+  if (existingUserWithNewEmail) {
+    throw new ApiError(httpStatus.CONFLICT, "This email is already registered");
+  }
+
+  // Find current user
+  const currentUser = await prisma.user.findUnique({
+    where: { email: payload.currentEmail },
+  });
+
+  if (!currentUser) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  // Generate OTP for new email verification
+  const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Store temporary email change data
+  const tempEmailChangeKey = `temp_email_change_${emailOTP}`;
+  (global as any)[tempEmailChangeKey] = {
+    userId: currentUser.id,
+    currentEmail: payload.currentEmail,
+    newEmail: payload.newEmail,
+    expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+  };
+
+  // Send verification OTP to new email
+  try {
+    const emailHTML = emailTemplate(emailOTP);
+    await sentEmailUtility(
+      payload.newEmail,
+      "Email Change Verification - VOXA",
+      emailHTML
+    );
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to send verification email");
+  }
+
+  return {
+    message: "Verification OTP sent to new email. Please verify to complete email change.",
+    newEmail: payload.newEmail,
+  };
+};
+
+// Verify email change
+const verifyEmailChange = async (payload: {
+  otp: string;
+}) => {
+  // Find email change data from temporary storage using OTP
+  const tempEmailChangeKey = `temp_email_change_${payload.otp}`;
+  const tempEmailChangeData = (global as any)[tempEmailChangeKey];
+
+  if (!tempEmailChangeData) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid OTP");
+  }
+
+  if (new Date() > tempEmailChangeData.expires) {
+    // Clean up expired data
+    delete (global as any)[tempEmailChangeKey];
+    throw new ApiError(httpStatus.BAD_REQUEST, "OTP has expired");
+  }
+
+  // Update user's email
+  const updatedUser = await prisma.user.update({
+    where: { id: tempEmailChangeData.userId },
+    data: {
+      email: tempEmailChangeData.newEmail,
+      userStatus: UserStatus.ACTIVE,
+    },
+    select: {
+      id: true,
+      email: true,
+      userStatus: true,
+    },
+  });
+
+  // Clean up temporary storage
+  delete (global as any)[tempEmailChangeKey];
+
+  return {
+    message: "Email changed successfully",
+    user: {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      userStatus: updatedUser.userStatus,
+    },
   };
 };
 
@@ -164,21 +438,27 @@ const setupBasicInfo = async (userId: string, payload: {
 };
 
 // Step 5: Upload profile photos
-const uploadProfilePhotos = async (userId: string, payload: {
-  photos: string[];
+const uploadProfilePhotos = async (userId: string, files: Express.Multer.File[], payload: {
   mainPhotoIndex?: number;
 }) => {
-  if (payload.photos.length < 1 || payload.photos.length > 4) {
+  if (!files || files.length < 1 || files.length > 4) {
     throw new ApiError(httpStatus.BAD_REQUEST, "You must upload 1-4 photos");
   }
 
+  // Upload files to S3
+  const uploadResults = await S3Uploader.uploadMultipleFilesToS3(files, 'profile-photos');
+  const photoUrls = uploadResults.map(result => result.Location);
+
+  // Set main photo (default: first photo, index 0)
   const mainPhotoIndex = payload.mainPhotoIndex || 0;
-  const mainProfilePhoto = payload.photos[mainPhotoIndex];
+  const mainProfilePhoto = photoUrls[mainPhotoIndex];
+  
+  console.log(`Main photo index: ${mainPhotoIndex}, Photo: ${mainProfilePhoto}`);
 
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      profilePhotos: payload.photos,
+      profilePhotos: photoUrls,
       mainProfilePhoto,
       profileCompletionStep: 3, // Photos uploaded
     },
@@ -192,7 +472,6 @@ const uploadProfilePhotos = async (userId: string, payload: {
 
   return {
     user,
-    message: "Profile photos uploaded successfully",
   };
 };
 
@@ -249,60 +528,182 @@ const writeBio = async (userId: string, payload: {
 
   return {
     user,
-    message: "Bio updated successfully",
   };
+};
+
+// Save voice text (Flutter থেকে আসা text)
+const saveVoiceText = async (userId: string, payload: {
+  voiceText: string;
+  duration: number;
+}) => {
+  if (!payload.voiceText || payload.voiceText.trim().length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Voice text is required");
+  }
+
+  if (payload.voiceText.length > 500) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Voice text cannot exceed 500 characters");
+  }
+
+  if (payload.duration < 1 || payload.duration > 600) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Voice duration must be between 1-600 seconds");
+  }
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      voiceIntroduction: payload.voiceText, // Text save করছি
+      voiceIntroductionDuration: payload.duration,
+      profileCompletionStep: 4, // Voice recorded
+    },
+    select: {
+      id: true,
+      voiceIntroduction: true,
+      voiceIntroductionDuration: true,
+      profileCompletionStep: true,
+    },
+  });
+
+  return {
+    user,
+  };
+};
+
+// Upload audio file
+const uploadAudioFile = async (userId: string, file: Express.Multer.File) => {
+  if (!file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio file is required");
+  }
+
+  // Check file type
+  const allowedMimeTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a', 'audio/aac'];
+  if (!allowedMimeTypes.includes(file.mimetype)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid audio file type. Allowed: MP3, WAV, M4A, AAC");
+  }
+
+  // Check file size (max 10MB)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio file size must be less than 10MB");
+  }
+
+  try {
+    // Upload to S3
+    const uploadResult = await S3Uploader.uploadToS3(file, 'audio');
+    
+    // Return the S3 URL
+    return {
+      url: uploadResult.Location,
+      filename: file.originalname,
+      size: file.size,
+      message: "Audio file uploaded successfully"
+    };
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to upload audio file");
+  }
 };
 
 // Step 8: Upload identity document
-const uploadIdentityDocument = async (userId: string, payload: {
-  documentUrl: string;
+const uploadIdentityDocument = async (userId: string, file: Express.Multer.File, payload: {
   documentType: 'GOVERNMENT_ID' | 'PASSPORT' | 'DRIVERS_LICENSE';
 }) => {
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      identityDocument: payload.documentUrl,
-      identityVerificationStatus: VerificationStatus.PENDING,
-      profileCompletionStep: 6, // Identity document uploaded
-    },
-    select: {
-      id: true,
-      identityDocument: true,
-      identityVerificationStatus: true,
-      profileCompletionStep: true,
-    },
-  });
+  if (!file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Document file is required");
+  }
 
-  return {
-    user,
-    message: "Identity document uploaded successfully. Verification pending.",
-  };
+  // Check file type (images and PDFs)
+  const allowedMimeTypes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+    'application/pdf', 'application/msword', 
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
+  
+  if (!allowedMimeTypes.includes(file.mimetype)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid file type. Allowed: JPG, PNG, PDF, DOC, DOCX");
+  }
+
+  // Check file size (max 10MB)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Document file size must be less than 10MB");
+  }
+
+  try {
+    // Upload to S3
+    const uploadResult = await S3Uploader.uploadToS3(file, 'identity-documents');
+    
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        identityDocument: uploadResult.Location,
+        identityVerificationStatus: VerificationStatus.PENDING,
+        profileCompletionStep: 6, // Identity document uploaded
+      },
+      select: {
+        id: true,
+        identityDocument: true,
+        identityVerificationStatus: true,
+        profileCompletionStep: true,
+      },
+    });
+
+    return {
+      user,
+    };
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to upload identity document");
+  }
 };
 
 // Step 9: Upload income document
-const uploadIncomeDocument = async (userId: string, payload: {
-  documentUrl: string;
+const uploadIncomeDocument = async (userId: string, file: Express.Multer.File, payload: {
   documentType: 'PAY_STUB' | 'W2' | 'OFFER_LETTER' | 'BANK_STATEMENT';
 }) => {
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      incomeDocument: payload.documentUrl,
-      incomeVerificationStatus: VerificationStatus.PENDING,
-      profileCompletionStep: 7, // Income document uploaded
-    },
-    select: {
-      id: true,
-      incomeDocument: true,
-      incomeVerificationStatus: true,
-      profileCompletionStep: true,
-    },
-  });
+  if (!file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Document file is required");
+  }
 
-  return {
-    user,
-    message: "Income document uploaded successfully. Verification pending.",
-  };
+  // Check file type (images and PDFs)
+  const allowedMimeTypes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+    'application/pdf', 'application/msword', 
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ];
+  
+  if (!allowedMimeTypes.includes(file.mimetype)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid file type. Allowed: JPG, PNG, PDF, DOC, DOCX");
+  }
+
+  // Check file size (max 10MB)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Document file size must be less than 10MB");
+  }
+
+  try {
+    // Upload to S3
+    const uploadResult = await S3Uploader.uploadToS3(file, 'income-documents');
+    
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        incomeDocument: uploadResult.Location,
+        incomeVerificationStatus: VerificationStatus.PENDING,
+        profileCompletionStep: 7, // Income document uploaded
+      },
+      select: {
+        id: true,
+        incomeDocument: true,
+        incomeVerificationStatus: true,
+        profileCompletionStep: true,
+      },
+    });
+
+    return {
+      user,
+    };
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to upload income document");
+  }
 };
 
 // Step 10: Set badge preferences
@@ -386,8 +787,6 @@ const loginUser = async (payload: {
       name: user.name,
       email: user.email,
       role: user.role,
-      profileCompletionStep: user.profileCompletionStep,
-      userStatus: user.userStatus,
     },
     accessToken,
     refreshToken,
@@ -528,15 +927,12 @@ const forgotPassword = async (payload: { email: string }) => {
   });
 
   try {
-    await emailTemplate({
-      email: user.email,
-      subject: "Password Reset",
-      html: `
-        <h2>Password Reset Request</h2>
-        <p>Your verification code is: <strong>${emailOTP}</strong></p>
-        <p>This code will expire in 10 minutes.</p>
-      `,
-    });
+    const emailHTML = emailTemplate(emailOTP);
+    await sentEmailUtility(
+      user.email,
+      "Password Reset - VOXA",
+      emailHTML
+    );
   } catch (error) {
     console.error('Error sending email:', error);
   }
@@ -690,12 +1086,19 @@ const getUserProfile = async (userId: string) => {
 export const AuthServices = {
   // Registration flow
   registerWithEmail,
+  sendEmailOTP,
+  verifyEmailOTP,
+  resendEmailOTP,
+  changeEmail,
+  verifyEmailChange,
   sendPhoneOTP,
   verifyPhoneOTP,
   setupBasicInfo,
   uploadProfilePhotos,
   recordVoiceIntroduction,
   writeBio,
+  saveVoiceText,
+  uploadAudioFile,
   uploadIdentityDocument,
   uploadIncomeDocument,
   setBadgePreferences,

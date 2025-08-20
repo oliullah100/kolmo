@@ -9,12 +9,54 @@ const registerWithEmail = z.object({
     password: z.string({
       required_error: 'Password is required',
     }).min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string({
-      required_error: 'Confirm password is required',
-    }),
-  }).refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
+  }),
+});
+
+// Email OTP sending schema
+const sendEmailOTP = z.object({
+  body: z.object({
+    email: z.string({
+      required_error: 'Email is required',
+    }).email('Invalid email format'),
+  }),
+});
+
+// Email verification schema
+const verifyEmailOTP = z.object({
+  body: z.object({
+    otp: z.string({
+      required_error: 'OTP is required',
+    }).length(6, 'OTP must be 6 digits'),
+  }),
+});
+
+// Resend email OTP schema
+const resendEmailOTP = z.object({
+  body: z.object({
+    email: z.string({
+      required_error: 'Email is required',
+    }).email('Invalid email format'),
+  }),
+});
+
+// Change email schema
+const changeEmail = z.object({
+  body: z.object({
+    newEmail: z.string({
+      required_error: 'New email is required',
+    }).email('Invalid email format'),
+    currentEmail: z.string({
+      required_error: 'Current email is required',
+    }).email('Invalid email format'),
+  }),
+});
+
+// Verify email change schema
+const verifyEmailChange = z.object({
+  body: z.object({
+    otp: z.string({
+      required_error: 'OTP is required',
+    }).length(6, 'OTP must be 6 digits'),
   }),
 });
 
@@ -64,7 +106,6 @@ const setupBasicInfo = z.object({
 
 const uploadProfilePhotos = z.object({
   body: z.object({
-    photos: z.array(z.string().url('Invalid photo URL')).min(1, 'At least one photo is required').max(4, 'Maximum 4 photos allowed'),
     mainPhotoIndex: z.number().min(0).max(3).optional(),
   }),
 });
@@ -88,12 +129,20 @@ const writeBio = z.object({
   }),
 });
 
+const saveVoiceText = z.object({
+  body: z.object({
+    voiceText: z.string({
+      required_error: 'Voice text is required',
+    }).min(1, 'Voice text cannot be empty').max(500, 'Voice text cannot exceed 500 characters'),
+    duration: z.number({
+      required_error: 'Voice duration is required',
+    }).min(1, 'Duration must be at least 1 second').max(600, 'Duration cannot exceed 10 minutes'),
+  }),
+});
+
 // Verification schemas
 const uploadIdentityDocument = z.object({
   body: z.object({
-    documentUrl: z.string({
-      required_error: 'Document URL is required',
-    }).url('Invalid document URL'),
     documentType: z.enum(['GOVERNMENT_ID', 'PASSPORT', 'DRIVERS_LICENSE'], {
       required_error: 'Document type is required',
     }),
@@ -102,9 +151,6 @@ const uploadIdentityDocument = z.object({
 
 const uploadIncomeDocument = z.object({
   body: z.object({
-    documentUrl: z.string({
-      required_error: 'Document URL is required',
-    }).url('Invalid document URL'),
     documentType: z.enum(['PAY_STUB', 'W2', 'OFFER_LETTER', 'BANK_STATEMENT'], {
       required_error: 'Document type is required',
     }),
@@ -219,12 +265,18 @@ const updateProfile = z.object({
 export const authValidation = {
   // Registration flow
   registerWithEmail,
+  sendEmailOTP,
+  verifyEmailOTP,
+  resendEmailOTP,
+  changeEmail,
+  verifyEmailChange,
   sendPhoneOTP,
   verifyPhoneOTP,
   setupBasicInfo,
   uploadProfilePhotos,
   recordVoiceIntroduction,
   writeBio,
+  saveVoiceText,
   uploadIdentityDocument,
   uploadIncomeDocument,
   setBadgePreferences,

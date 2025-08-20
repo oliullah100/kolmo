@@ -3,6 +3,7 @@ import validateRequest from "../../middlewares/validateRequest";
 import auth from "../../middlewares/auth";
 import { AuthControllers } from "./auth.controller";
 import { authValidation } from "./auth.validation";
+import { fileUploader } from "../../middlewares/multerFileUploade";
 
 const router = express.Router();
 
@@ -11,6 +12,36 @@ router.post(
   '/register/email',
   validateRequest(authValidation.registerWithEmail),
   AuthControllers.registerWithEmail
+);
+
+router.post(
+  '/send-email-otp',
+  validateRequest(authValidation.sendEmailOTP),
+  AuthControllers.sendEmailOTP
+);
+
+router.post(
+  '/verify-email',
+  validateRequest(authValidation.verifyEmailOTP),
+  AuthControllers.verifyEmailOTP
+);
+
+router.post(
+  '/resend-email-otp',
+  validateRequest(authValidation.resendEmailOTP),
+  AuthControllers.resendEmailOTP
+);
+
+router.post(
+  '/change-email',
+  validateRequest(authValidation.changeEmail),
+  AuthControllers.changeEmail
+);
+
+router.post(
+  '/verify-email-change',
+  validateRequest(authValidation.verifyEmailChange),
+  AuthControllers.verifyEmailChange
 );
 
 router.post(
@@ -36,6 +67,7 @@ router.post(
 router.post(
   '/profile/upload-photos',
   auth(),
+  fileUploader.uploadProfilePhotos,
   validateRequest(authValidation.uploadProfilePhotos),
   AuthControllers.uploadProfilePhotos
 );
@@ -47,6 +79,7 @@ router.post(
   AuthControllers.recordVoiceIntroduction
 );
 
+// Step 7: Write bio
 router.post(
   '/profile/write-bio',
   auth(),
@@ -54,9 +87,18 @@ router.post(
   AuthControllers.writeBio
 );
 
+// Save voice text (Flutter থেকে আসা text)
+router.post(
+  '/profile/save-voice-text',
+  auth(),
+  validateRequest(authValidation.saveVoiceText),
+  AuthControllers.saveVoiceText
+);
+
 router.post(
   '/profile/upload-identity',
   auth(),
+  fileUploader.uploadIdentityDocument,
   validateRequest(authValidation.uploadIdentityDocument),
   AuthControllers.uploadIdentityDocument
 );
@@ -64,6 +106,7 @@ router.post(
 router.post(
   '/profile/upload-income',
   auth(),
+  fileUploader.uploadIncomeDocument,
   validateRequest(authValidation.uploadIncomeDocument),
   AuthControllers.uploadIncomeDocument
 );
@@ -73,6 +116,14 @@ router.post(
   auth(),
   validateRequest(authValidation.setBadgePreferences),
   AuthControllers.setBadgePreferences
+);
+
+// Upload audio file route
+router.post(
+  '/profile/upload-audio',
+  auth(),
+  fileUploader.uploadAudio,
+  AuthControllers.uploadAudioFile
 );
 
 // Login routes

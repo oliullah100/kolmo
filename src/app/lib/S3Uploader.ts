@@ -2,6 +2,7 @@
 import path from "path";
 import fs from "fs/promises";
 import { Readable } from "stream";
+import { unlink } from "fs/promises";
 import {
 
   CreateMultipartUploadCommand,
@@ -80,8 +81,64 @@ const abortMultipartUpload = async (
   }
 };
 
+// **Upload Multiple Files to S3**
+const uploadMultipleFilesToS3 = async (
+  files: Express.Multer.File[],
+  folder?: string
+): Promise<{ Location: string; Bucket: string; Key: string }[]> => {
+  if (!files || files.length === 0) {
+    throw new Error("Files are required for uploading.");
+  }
+
+  const uploadPromises = files.map(async (file) => {
+    if (!file.path || !file.mimetype || !file.originalname) {
+      throw new Error("Invalid file data provided.");
+    }
+
+    const Bucket = config.S3.bucketName || "";
+    const Key = folder ? `deepblue/${folder}/${file.originalname}` : `deepblue/${file.originalname}`;
+
+    try {
+      const fileBuffer = await fs.readFile(file.path);
+      const command = new PutObjectCommand({
+        Bucket: config.S3.bucketName,
+        Key,
+        Body: fileBuffer,
+        ACL: "public-read" as ObjectCannedACL,
+        ContentType: file.mimetype,
+      });
+
+      const uploadResult = await s3Client.send(command);
+
+      if (!uploadResult) {
+        throw new Error("Failed to upload file.");
+      }
+
+      // Clean up local file after successful upload
+      try {
+        await unlink(file.path);
+      } catch (cleanupError) {
+        console.error("Error cleaning up local file:", cleanupError);
+      }
+
+      console.log(`${config.S3.originEndpoint}/${Key}`);
+      return {
+        Location: `https://${Bucket}.s3.amazonaws.com/${Key}`,
+        Bucket,
+        Key,
+      };
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      throw error;
+    }
+  });
+
+  return Promise.all(uploadPromises);
+};
+
 // Export file uploader methods
 export const S3Uploader = {
   abortMultipartUpload,
   uploadToS3,
+  uploadMultipleFilesToS3,
 };

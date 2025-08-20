@@ -14,8 +14,8 @@ export default {
   jwt: {
     access_secret: process.env.JWT_ACCESS_SECRET,
     access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,
-    refresh_token_secret: process.env.REFRESH_TOKEN_SECRET,
-    refresh_token_expires_in: process.env.REFRESH_TOKEN_EXPIRES_IN,
+    refresh_token_secret: process.env.JWT_REFRESH_SECRET,
+    refresh_token_expires_in: process.env.JWT_REFRESH_EXPIRES_IN,
     reset_pass_secret: process.env.JWT_RESET_PASS_SECRET,
     reset_pass_token_expires_in: process.env.JWT_RESET_PASS_EXPIRES_IN,
   },
