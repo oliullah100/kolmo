@@ -206,15 +206,7 @@ const loginUser = catchAsync(async (req, res) => {
   });
 });
 
-// Login admin
-const loginAdmin = catchAsync(async (req, res) => {
-  const result = await AuthServices.loginAdmin(req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: 'Admin logged in successfully',
-    data: result,
-  });
-});
+
 
 // Social login
 const loginUserSocial = catchAsync(async (req, res) => {
@@ -226,35 +218,7 @@ const loginUserSocial = catchAsync(async (req, res) => {
   });
 });
 
-// Forgot password
-const forgotPassword = catchAsync(async (req, res) => {
-  const result = await AuthServices.forgotPassword(req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: "OTP sent successfully",
-    data: result,
-  });
-});
 
-// Verify OTP
-const verifyOTP = catchAsync(async (req, res) => {
-  const result = await AuthServices.verifyOTP(req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: "OTP verified successfully",
-    data: result,
-  });
-});
-
-// Reset password
-const resetPassword = catchAsync(async (req, res) => {
-  const result = await AuthServices.resetPassword(req.body);
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: "Password reset successfully",
-    data: result,
-  });
-});
 
 // Update profile
 const updateProfile = catchAsync(async (req, res) => {
@@ -362,13 +326,7 @@ export const AuthControllers = {
   
   // Login
   loginUser,
-  loginAdmin,
   loginUserSocial,
-  
-  // Password reset
-  forgotPassword,
-  verifyOTP,
-  resetPassword,
   
   // Profile management
   updateProfile,

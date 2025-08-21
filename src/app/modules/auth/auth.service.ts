@@ -842,61 +842,7 @@ const loginUser = async (payload: {
   };
 };
 
-// Login admin
-const loginAdmin = async (payload: {
-  email: string;
-  password: string;
-  role: 'ADMIN' | 'SUPER_ADMIN';
-  rememberMe?: boolean;
-}) => {
-  const user = await prisma.user.findUnique({
-    where: { email: payload.email },
-  });
 
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  if (user.role !== payload.role) {
-    throw new ApiError(httpStatus.FORBIDDEN, "Access denied");
-  }
-
-  const isPasswordValid = await bcrypt.compare(payload.password, user.password!);
-  if (!isPasswordValid) {
-    throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid password");
-  }
-
-  const accessToken = jwtHelpers.generateToken(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    },
-    config.jwt.access_secret as Secret,
-    config.jwt.access_expires_in as string
-  );
-
-  const refreshToken = jwtHelpers.generateToken(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    },
-    config.jwt.refresh_token_secret as Secret,
-    config.jwt.refresh_token_expires_in as string
-  );
-
-  return {
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    },
-    accessToken,
-    refreshToken,
-  };
-};
 
 // Social login
 const loginUserSocial = async (payload: {
@@ -956,108 +902,7 @@ const loginUserSocial = async (payload: {
   };
 };
 
-// Forgot password
-const forgotPassword = async (payload: { email: string }) => {
-  const user = await prisma.user.findUnique({
-    where: { email: payload.email },
-  });
 
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  const emailOTP = Math.floor(100000 + Math.random() * 900000).toString();
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      emailOTP,
-      emailOTPExpires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-    },
-  });
-
-  try {
-    const emailHTML = emailTemplate(emailOTP);
-    await sentEmailUtility(
-      user.email,
-      "Password Reset - VOXA",
-      emailHTML
-    );
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
-
-  return {
-    message: "OTP sent successfully",
-  };
-};
-
-// Verify OTP
-const verifyOTP = async (payload: { email: string; otp: string }) => {
-  const user = await prisma.user.findUnique({
-    where: { email: payload.email },
-  });
-
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  if (!user.emailOTP || !user.emailOTPExpires) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "No OTP found");
-  }
-
-  if (new Date() > user.emailOTPExpires) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "OTP has expired");
-  }
-
-  if (user.emailOTP !== payload.otp) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid OTP");
-  }
-
-  // Clear OTP after successful verification
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      emailOTP: null,
-      emailOTPExpires: null,
-    },
-  });
-
-  return {
-    message: "OTP verified successfully",
-  };
-};
-
-// Reset password
-const resetPassword = async (payload: {
-  email: string;
-  newPassword: string;
-  confirmPassword: string;
-}) => {
-  if (payload.newPassword !== payload.confirmPassword) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Passwords don't match");
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: payload.email },
-  });
-
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  const hashedPassword = await bcrypt.hash(payload.newPassword, 12);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      password: hashedPassword,
-    },
-  });
-
-  return {
-    message: "Password reset successfully",
-  };
-};
 
 // Update profile
 const updateProfile = async (userId: string, payload: {
@@ -1488,13 +1333,7 @@ export const AuthServices = {
   
   // Login
   loginUser,
-  loginAdmin,
   loginUserSocial,
-  
-  // Password reset
-  forgotPassword,
-  verifyOTP,
-  resetPassword,
   
   // Profile management
   updateProfile,

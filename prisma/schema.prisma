@@ -109,7 +109,7 @@ model User {
   showIncomeBadge       Boolean    @default(false)
   
   // Stripe integration
-  stripeCustomerId      String?    @unique
+  stripeCustomerId      String?
   
   // OTP and verification
   phoneOTP              String?

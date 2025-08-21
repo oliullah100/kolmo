@@ -190,20 +190,7 @@ const loginUser = z.object({
   }),
 });
 
-const loginAdmin = z.object({
-  body: z.object({
-    email: z.string({
-      required_error: 'Email is required',
-    }).email('Invalid email format'),
-    password: z.string({
-      required_error: 'Password is required',
-    }),
-    role: z.enum(['ADMIN', 'SUPER_ADMIN'], {
-      required_error: 'Role is required',
-    }),
-    rememberMe: z.boolean().optional(),
-  }),
-});
+
 
 const loginUserSocial = z.object({
   body: z.object({
@@ -219,42 +206,7 @@ const loginUserSocial = z.object({
   }),
 });
 
-// Password reset schemas
-const forgotPassword = z.object({
-  body: z.object({
-    email: z.string({
-      required_error: 'Email is required',
-    }).email('Invalid email format'),
-  }),
-});
 
-const verifyOTP = z.object({
-  body: z.object({
-    email: z.string({
-      required_error: 'Email is required',
-    }).email('Invalid email format'),
-    otp: z.string({
-      required_error: 'OTP is required',
-    }).length(6, 'OTP must be 6 digits'),
-  }),
-});
-
-const resetPassword = z.object({
-  body: z.object({
-    email: z.string({
-      required_error: 'Email is required',
-    }).email('Invalid email format'),
-    newPassword: z.string({
-      required_error: 'New password is required',
-    }).min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string({
-      required_error: 'Confirm password is required',
-    }),
-  }).refine((data) => data.newPassword === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  }),
-});
 
 // Profile update schema
 const updateProfile = z.object({
@@ -353,13 +305,7 @@ export const authValidation = {
   
   // Login
   loginUser,
-  loginAdmin,
   loginUserSocial,
-  
-  // Password reset
-  forgotPassword,
-  verifyOTP,
-  resetPassword,
   
   // Profile management
   updateProfile,

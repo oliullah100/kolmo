@@ -166,11 +166,7 @@ router.post(
   AuthControllers.loginUser
 );
 
-router.post(
-  '/login/admin',
-  validateRequest(authValidation.loginAdmin),
-  AuthControllers.loginAdmin
-);
+
 
 router.post(
   '/login/social',
@@ -178,24 +174,7 @@ router.post(
   AuthControllers.loginUserSocial
 );
 
-// Password reset routes
-router.post(
-  '/forgot-password',
-  validateRequest(authValidation.forgotPassword),
-  AuthControllers.forgotPassword
-);
 
-router.post(
-  '/verify-otp',
-  validateRequest(authValidation.verifyOTP),
-  AuthControllers.verifyOTP
-);
-
-router.post(
-  '/reset-password',
-  validateRequest(authValidation.resetPassword),
-  AuthControllers.resetPassword
-);
 
 // Profile management routes (require authentication)
 router.get(

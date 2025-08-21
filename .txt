@@ -1,0 +1,51 @@
+আমি দেখতে পাচ্ছি যে admin panel এ User Management এর জন্য অনেকগুলো API লাগবে। চলুন আগে list করি:
+
+## 📋 **Admin User Management APIs - Required:**
+
+### **1. User List & Search APIs:**
+- `GET /api/v1/admin/users` - সব users এর list (with pagination, filtering)
+- `GET /api/v1/admin/users/search` - users search by name, email, etc.
+
+### **2. User Details APIs:**
+- `GET /api/v1/admin/users/:userId` - specific user এর detailed info
+- `GET /api/v1/admin/users/:userId/profile-photos` - user এর profile photos
+- `GET /api/v1/admin/users/:userId/voice-records` - user এর voice records
+
+### **3. User Status Management APIs:**
+- `PATCH /api/v1/admin/users/:userId/status` - user status change (ACTIVE/BLOCKED/INACTIVE)
+- `PATCH /api/v1/admin/users/:userId/role` - user role change (USER/ADMIN/SUPER_ADMIN)
+
+### **4. Verification Management APIs:**
+- `PATCH /api/v1/admin/users/:userId/identity-verify` - identity verification approve/reject
+- `PATCH /api/v1/admin/users/:userId/income-verify` - income verification approve/reject
+- `GET /api/v1/admin/verifications/pending` - pending verifications list
+
+### **5. Warning/Flag Management APIs:**
+- `POST /api/v1/admin/users/:userId/warnings` - user কে warning দিতে
+- `GET /api/v1/admin/users/:userId/warnings` - user এর warnings history
+- `PATCH /api/v1/admin/users/:userId/warnings/:warningId` - warning update
+
+### **6. Voice Moderation APIs:**
+- `GET /api/v1/admin/voice-moderations` - flagged voice messages list
+- `PATCH /api/v1/admin/voice-moderations/:messageId` - approve/reject flagged voice
+- `DELETE /api/v1/admin/voice-moderations/:messageId` - delete flagged voice
+
+### **7. Reports & Analytics APIs:**
+- `GET /api/v1/admin/reports/users` - user statistics
+- `GET /api/v1/admin/reports/verifications` - verification statistics
+- `GET /api/v1/admin/reports/warnings` - warning statistics
+
+### **8. Subscription Management APIs:**
+- `GET /api/v1/admin/subscriptions` - সব subscriptions list
+- `PATCH /api/v1/admin/subscriptions/:subscriptionId` - subscription status change
+
+---
+
+## 🎯 **Total APIs Needed: ~20-25 APIs**
+
+**Priority Order:**
+1. **High Priority (Must have):** User list, user details, status management
+2. **Medium Priority:** Verification management, warning system
+3. **Low Priority:** Reports, analytics, subscription management
+
+**আপনি কখন শুরু করতে চান? আমি step by step implement করব।**
