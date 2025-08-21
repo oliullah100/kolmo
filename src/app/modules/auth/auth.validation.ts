@@ -114,10 +114,19 @@ const recordVoiceIntroduction = z.object({
   body: z.object({
     voiceUrl: z.string({
       required_error: 'Voice recording URL is required',
-    }).url('Invalid voice URL'),
-    duration: z.number({
+    }).url('Invalid voice URL').optional(), // Made optional since we can now upload file
+    duration: z.union([
+      z.number().min(1, 'Duration must be at least 1 second').max(300, 'Duration cannot exceed 5 minutes'),
+      z.string().transform((val) => {
+        const num = parseInt(val);
+        if (isNaN(num)) {
+          throw new Error('Duration must be a valid number');
+        }
+        return num;
+      }).pipe(z.number().min(1, 'Duration must be at least 1 second').max(300, 'Duration cannot exceed 5 minutes'))
+    ], {
       required_error: 'Voice duration is required',
-    }).min(1, 'Duration must be at least 1 second').max(300, 'Duration cannot exceed 5 minutes'),
+    }),
   }),
 });
 

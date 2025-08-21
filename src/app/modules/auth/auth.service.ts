@@ -477,18 +477,67 @@ const uploadProfilePhotos = async (userId: string, files: Express.Multer.File[],
 
 // Step 6: Record voice introduction
 const recordVoiceIntroduction = async (userId: string, payload: {
-  voiceUrl: string;
+  voiceUrl?: string;
   duration: number;
-}) => {
+}, file?: Express.Multer.File) => {
   if (payload.duration < 1 || payload.duration > 300) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Voice recording must be between 1-300 seconds");
+  }
+
+  let voiceUrl = payload.voiceUrl;
+
+  // If audio file is uploaded, process it
+  if (file) {
+    // Check file type - more comprehensive MIME types
+    const allowedMimeTypes = [
+      'audio/mpeg', 
+      'audio/mp3', 
+      'audio/mp4',
+      'audio/wav', 
+      'audio/wave',
+      'audio/x-wav',
+      'audio/m4a', 
+      'audio/aac',
+      'audio/x-m4a',
+      'audio/3gpp',
+      'audio/3gpp2',
+      'audio/ogg',
+      'audio/webm'
+    ];
+    
+    // Also check file extension as fallback
+    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm'];
+    const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+    
+    if (!allowedMimeTypes.includes(file.mimetype) && !allowedExtensions.includes(fileExtension)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid audio file type. Allowed: MP3, WAV, M4A, AAC, OGG, WEBM");
+    }
+
+    // Check file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Audio file size must be less than 10MB");
+    }
+
+    try {
+      // Upload to S3
+      const uploadResult = await S3Uploader.uploadToS3(file, 'voice-introductions');
+      voiceUrl = uploadResult.Location;
+    } catch (error) {
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to upload audio file");
+    }
+  }
+
+  // If no voiceUrl (either from payload or file upload), throw error
+  if (!voiceUrl) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Voice URL or audio file is required");
   }
 
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      voiceIntroduction: payload.voiceUrl,
-      voiceIntroductionDuration: payload.duration,
+      voiceIntroduction: voiceUrl,
+      voiceIntroductionDuration: Number(payload.duration), // Convert to number
       profileCompletionStep: 4, // Voice recorded
     },
     select: {

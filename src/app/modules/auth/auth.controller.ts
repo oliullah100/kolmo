@@ -109,7 +109,8 @@ const uploadProfilePhotos = catchAsync(async (req, res) => {
 // Step 6: Record voice introduction
 const recordVoiceIntroduction = catchAsync(async (req, res) => {
   const { id } = req.user;
-  const result = await AuthServices.recordVoiceIntroduction(id, req.body);
+  const file = req.file; // Audio file from multer
+  const result = await AuthServices.recordVoiceIntroduction(id, req.body, file);
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Voice introduction recorded successfully',

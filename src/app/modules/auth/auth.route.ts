@@ -75,6 +75,7 @@ router.post(
 router.post(
   '/profile/record-voice',
   auth(),
+  fileUploader.uploadAudio,
   validateRequest(authValidation.recordVoiceIntroduction),
   AuthControllers.recordVoiceIntroduction
 );
