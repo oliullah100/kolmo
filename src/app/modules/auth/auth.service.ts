@@ -1310,6 +1310,162 @@ const getProfileRecords = async (userId: string, query: any) => {
   return response;
 };
 
+// Get other user's voice introduction
+const getUserVoiceIntroduction = async (currentUserId: string, targetUserId: string) => {
+  // Check if target user exists
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      id: true,
+      name: true,
+      mainProfilePhoto: true,
+      voiceIntroduction: true,
+      voiceIntroductionDuration: true,
+      userStatus: true,
+    },
+  });
+
+  if (!targetUser) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  if (targetUser.userStatus !== 'ACTIVE') {
+    throw new ApiError(httpStatus.FORBIDDEN, "User profile is not available");
+  }
+
+  if (!targetUser.voiceIntroduction) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User has no voice introduction");
+  }
+
+  return {
+    user: {
+      id: targetUser.id,
+      name: targetUser.name,
+      mainProfilePhoto: targetUser.mainProfilePhoto,
+      voiceIntroduction: targetUser.voiceIntroduction,
+      voiceIntroductionDuration: targetUser.voiceIntroductionDuration,
+    },
+  };
+};
+
+// Send voice message to another user
+const sendVoiceMessage = async (senderId: string, payload: any, file: Express.Multer.File) => {
+  // Extract data from payload
+  const { receiverId, duration, message } = payload;
+  
+  // Validate required fields
+  if (!receiverId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Receiver ID is required");
+  }
+  
+  if (!duration) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Duration is required");
+  }
+  
+  // Validate audio file
+  const allowedMimeTypes = [
+    'audio/mpeg', 
+    'audio/mp3', 
+    'audio/mp4',
+    'audio/wav', 
+    'audio/wave',
+    'audio/x-wav',
+    'audio/m4a', 
+    'audio/aac',
+    'audio/x-m4a',
+    'audio/3gpp',
+    'audio/3gpp2',
+    'audio/ogg',
+    'audio/webm'
+  ];
+  
+  const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm'];
+  const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+  
+  if (!allowedMimeTypes.includes(file.mimetype) && !allowedExtensions.includes(fileExtension)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid audio file type. Allowed: MP3, WAV, M4A, AAC, OGG, WEBM");
+  }
+
+  // Check file size (max 10MB for voice messages)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio file size must be less than 10MB");
+  }
+
+  // Validate duration
+  if (payload.duration < 1 || payload.duration > 300) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio duration must be between 1-300 seconds");
+  }
+
+  // Check if receiver exists
+  const receiver = await prisma.user.findUnique({
+    where: { id: payload.receiverId },
+    select: { id: true, userStatus: true },
+  });
+
+  if (!receiver) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Receiver not found");
+  }
+
+  if (receiver.userStatus !== 'ACTIVE') {
+    throw new ApiError(httpStatus.FORBIDDEN, "Cannot send message to inactive user");
+  }
+
+  // Prevent sending message to self
+  if (senderId === payload.receiverId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Cannot send message to yourself");
+  }
+
+  let audioUrl: string;
+
+  try {
+    // Upload to S3
+    const uploadResult = await S3Uploader.uploadToS3(file, 'voice-messages');
+    audioUrl = uploadResult.Location;
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to upload audio file");
+  }
+
+  // Create voice message record
+  const voiceMessage = await prisma.voiceMessage.create({
+    data: {
+      senderId: senderId,
+      receiverId: payload.receiverId,
+      audioUrl: audioUrl,
+      duration: Number(payload.duration), // Convert string to number
+      message: payload.message || '',
+      isRead: false,
+    },
+    select: {
+      id: true,
+      audioUrl: true,
+      duration: true,
+      message: true,
+      isRead: true,
+      createdAt: true,
+      sender: {
+        select: {
+          id: true,
+          name: true,
+          mainProfilePhoto: true,
+        }
+      },
+      receiver: {
+        select: {
+          id: true,
+          name: true,
+          mainProfilePhoto: true,
+        }
+      }
+    },
+  });
+
+  return {
+    voiceMessage,
+    message: "Voice message sent successfully",
+  };
+};
+
 export const AuthServices = {
   // Registration flow
   registerWithEmail,
@@ -1345,4 +1501,6 @@ export const AuthServices = {
   getUserProfile,
   postProfileRecord,
   getProfileRecords,
+  getUserVoiceIntroduction,
+  sendVoiceMessage,
 };

@@ -280,18 +280,9 @@ const postProfileRecord = z.object({
     description: z.string({
       required_error: 'Description is required',
     }).min(1, 'Description cannot be empty').max(500, 'Description cannot exceed 500 characters').optional(),
-    duration: z.union([
-      z.number().min(1, 'Duration must be at least 1 second').max(600, 'Duration cannot exceed 10 minutes'),
-      z.string().transform((val) => {
-        const num = parseInt(val);
-        if (isNaN(num)) {
-          throw new Error('Duration must be a valid number');
-        }
-        return num;
-      }).pipe(z.number().min(1, 'Duration must be at least 1 second').max(600, 'Duration cannot exceed 10 minutes'))
-    ], {
-      required_error: 'Audio duration is required',
-    }),
+    duration: z.number({
+      required_error: 'Duration is required',
+    }).min(1, 'Duration must be at least 1 second').max(600, 'Duration cannot exceed 600 seconds'),
     isPublic: z.union([
       z.boolean(),
       z.string().transform((val) => {
@@ -302,7 +293,42 @@ const postProfileRecord = z.object({
     ], {
       required_error: 'Public visibility setting is required',
     }).default(true),
-    tags: z.array(z.string()).max(10, 'Cannot have more than 10 tags').optional(),
+    tags: z.array(z.string()).max(10, 'Cannot exceed 10 tags').optional(),
+  }),
+});
+
+// Send voice message schema
+const sendVoiceMessage = z.object({
+  body: z.object({
+    data: z.string({
+      required_error: 'Data is required',
+    }).transform((val) => {
+      try {
+        return JSON.parse(val);
+      } catch (error) {
+        throw new Error('Invalid JSON format');
+      }
+    }).pipe(z.object({
+      receiverId: z.string({
+        required_error: 'Receiver ID is required',
+      }).min(1, 'Receiver ID cannot be empty'),
+      duration: z.union([
+        z.number().min(1, 'Duration must be at least 1 second').max(300, 'Duration cannot exceed 300 seconds'),
+        z.string().transform((val) => {
+          const num = parseInt(val);
+          if (isNaN(num)) {
+            throw new Error('Duration must be a valid number');
+          }
+          if (num < 1 || num > 300) {
+            throw new Error('Duration must be between 1-300 seconds');
+          }
+          return num;
+        })
+      ], {
+        required_error: 'Duration is required',
+      }),
+      message: z.string().max(200, 'Message cannot exceed 200 characters').optional(),
+    })),
   }),
 });
 
@@ -338,4 +364,5 @@ export const authValidation = {
   // Profile management
   updateProfile,
   postProfileRecord,
+  sendVoiceMessage,
 }; 

@@ -143,6 +143,22 @@ router.get(
   AuthControllers.getProfileRecords
 );
 
+// Get other user's voice introduction
+router.get(
+  '/profile/voice-introduction/:userId',
+  auth(),
+  AuthControllers.getUserVoiceIntroduction
+);
+
+// Send voice message to another user
+router.post(
+  '/profile/send-voice-message',
+  auth(),
+  fileUploader.uploadAudio,
+  validateRequest(authValidation.sendVoiceMessage),
+  AuthControllers.sendVoiceMessage
+);
+
 // Login routes
 router.post(
   '/login',

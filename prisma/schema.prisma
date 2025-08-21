@@ -135,6 +135,8 @@ model User {
   payments              Payment[]
   subscriptions         SubscriptionUser[]
   profileRecords        ProfileRecord[]
+  sentVoiceMessages     VoiceMessage[] @relation("SentVoiceMessages")
+  receivedVoiceMessages VoiceMessage[] @relation("ReceivedVoiceMessages")
 
   @@map("users")
 }
@@ -233,4 +235,20 @@ model ProfileRecord {
   updatedAt   DateTime @updatedAt
 
   @@map("profile_records")
+}
+
+model VoiceMessage {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  senderId   String   @db.ObjectId
+  sender     User     @relation("SentVoiceMessages", fields: [senderId], references: [id])
+  receiverId String   @db.ObjectId
+  receiver   User     @relation("ReceivedVoiceMessages", fields: [receiverId], references: [id])
+  audioUrl   String
+  duration   Int
+  message    String   @default("")
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("voice_messages")
 }

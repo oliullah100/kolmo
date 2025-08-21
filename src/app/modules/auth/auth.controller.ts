@@ -304,6 +304,42 @@ const getProfileRecords = catchAsync(async (req, res) => {
   });
 });
 
+// Get other user's voice introduction
+const getUserVoiceIntroduction = catchAsync(async (req, res) => {
+  const { id } = req.user;
+  const { userId } = req.params;
+  const result = await AuthServices.getUserVoiceIntroduction(id, userId);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "User voice introduction fetched successfully",
+    data: result,
+  });
+});
+
+// Send voice message to another user
+const sendVoiceMessage = catchAsync(async (req, res) => {
+  const { id } = req.user;
+  const file = req.file;
+  if (!file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio file is required");
+  }
+
+  // Parse the 'data' field from the request body, which is expected to be a JSON string
+  let parsedData;
+  try {
+    parsedData = JSON.parse(req.body.data);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid JSON format for 'data' field");
+  }
+
+  const result = await AuthServices.sendVoiceMessage(id, parsedData, file);
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    message: "Voice message sent successfully",
+    data: result,
+  });
+});
+
 export const AuthControllers = {
   // Registration flow
   registerWithEmail,
@@ -339,4 +375,6 @@ export const AuthControllers = {
   getUserProfile,
   postProfileRecord,
   getProfileRecords,
+  getUserVoiceIntroduction,
+  sendVoiceMessage,
 };
