@@ -134,6 +134,7 @@ model User {
   otps                  OTP[]
   payments              Payment[]
   subscriptions         SubscriptionUser[]
+  profileRecords        ProfileRecord[]
 
   @@map("users")
 }
@@ -214,4 +215,22 @@ model SubscriptionUser {
   updatedAt         DateTime @updatedAt
 
   @@map("subscription_users")
+}
+
+model ProfileRecord {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
+  title       String?
+  description String?
+  audioUrl    String
+  duration    Int      // Duration in seconds
+  isPublic    Boolean  @default(true)
+  tags        String[] // Array of tags
+  playCount   Int      @default(0)
+  likeCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("profile_records")
 }

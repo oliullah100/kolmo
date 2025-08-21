@@ -278,6 +278,32 @@ const getUserProfile = catchAsync(async (req, res) => {
   });
 });
 
+// Post profile record with audio
+const postProfileRecord = catchAsync(async (req, res) => {
+  const { id } = req.user;
+  const file = req.file;
+  if (!file) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio file is required");
+  }
+  const result = await AuthServices.postProfileRecord(id, req.body, file);
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    message: "Profile record posted successfully",
+    data: result,
+  });
+});
+
+// Get profile records
+const getProfileRecords = catchAsync(async (req, res) => {
+  const { id } = req.user;
+  const result = await AuthServices.getProfileRecords(id, req.query);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "Profile records fetched successfully",
+    data: result,
+  });
+});
+
 export const AuthControllers = {
   // Registration flow
   registerWithEmail,
@@ -311,4 +337,6 @@ export const AuthControllers = {
   // Profile management
   updateProfile,
   getUserProfile,
+  postProfileRecord,
+  getProfileRecords,
 };

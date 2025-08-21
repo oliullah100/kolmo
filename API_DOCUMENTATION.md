@@ -599,3 +599,141 @@ The registration flow tracks completion through steps:
 - **ACTIVE**: User is active and can use all features
 - **BLOCKED**: User is blocked by admin
 - **INACTIVE**: User account is inactive
+
+## Profile Record Endpoints
+
+### POST /api/auth/profile/post-record
+Post a new profile record with audio file.
+
+**Headers:**
+- `Authorization: Bearer <token>` (required)
+- `Content-Type: multipart/form-data`
+
+**Body (multipart/form-data):**
+- `audio` (file, required): Audio file (MP3, WAV, M4A, AAC, OGG, WEBM, max 15MB)
+- `title` (string, required): Title of the record (1-100 characters)
+- `description` (string, required): Description of the record (1-500 characters)
+- `duration` (number, required): Duration in seconds (1-600 seconds)
+- `isPublic` (boolean, required): Whether the record is public (default: true)
+- `tags` (array of strings, optional): Array of tags (max 10 tags)
+
+**Response:**
+```json
+{
+  "statusCode": 201,
+  "message": "Profile record posted successfully",
+  "data": {
+    "profileRecord": {
+      "id": "profile_record_id",
+      "title": "My Intro Voice",
+      "description": "This is my introduction voice message",
+      "audioUrl": "https://s3.amazonaws.com/bucket/profile-records/audio.mp3",
+      "duration": 30,
+      "isPublic": true,
+      "tags": ["intro", "voice"],
+      "playCount": 0,
+      "likeCount": 0,
+      "createdAt": "2024-01-15T10:30:00Z",
+      "user": {
+        "id": "user_id",
+        "name": "John Doe",
+        "mainProfilePhoto": "https://example.com/photo.jpg"
+      }
+    }
+  }
+}
+```
+
+### GET /api/auth/profile/records
+Get profile records (public and user's own).
+
+**Headers:**
+- `Authorization: Bearer <token>` (required)
+
+**Query Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Records per page (default: 10)
+- `userId` (string, optional): Filter by specific user ID
+
+**Response:**
+```json
+{
+  "statusCode": 200,
+  "message": "Profile records fetched successfully",
+  "data": {
+    "profileRecords": [
+      {
+        "id": "profile_record_id",
+        "title": "My Intro Voice",
+        "description": "This is my introduction voice message",
+        "audioUrl": "https://s3.amazonaws.com/bucket/profile-records/audio.mp3",
+        "duration": 30,
+        "isPublic": true,
+        "tags": ["intro", "voice"],
+        "playCount": 5,
+        "likeCount": 2,
+        "createdAt": "2024-01-15T10:30:00Z",
+        "user": {
+          "id": "user_id",
+          "name": "John Doe",
+          "mainProfilePhoto": "https://example.com/photo.jpg"
+        }
+      }
+    ],
+    "meta": {
+      "page": 1,
+      "limit": 10,
+      "total": 25,
+      "totalPages": 3
+    }
+  }
+}
+```
+
+## Usage Examples
+
+### Post a Profile Record
+```bash
+curl -X POST http://localhost:5000/api/auth/profile/post-record \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "audio=@/path/to/audio.mp3" \
+  -F "title=My Introduction" \
+  -F "description=This is my voice introduction message" \
+  -F "duration=30" \
+  -F "isPublic=true" \
+  -F "tags=intro" \
+  -F "tags=voice"
+```
+
+### Get Profile Records
+```bash
+curl -X GET "http://localhost:5000/api/auth/profile/records?page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Features
+
+1. **Audio Upload**: Supports multiple audio formats (MP3, WAV, M4A, AAC, OGG, WEBM)
+2. **File Validation**: Validates file type and size (max 15MB)
+3. **Duration Validation**: Ensures audio duration is between 1-600 seconds
+4. **Privacy Control**: Users can set records as public or private
+5. **Tagging System**: Users can add tags to categorize their records
+6. **Pagination**: GET endpoint supports pagination for better performance
+7. **User Information**: Returns user details with each record
+8. **Play/Like Counters**: Tracks play and like counts for engagement metrics
+
+## Database Schema
+
+The new `ProfileRecord` model includes:
+- `id`: Unique identifier
+- `userId`: Reference to the user who created the record
+- `title`: Record title
+- `description`: Record description
+- `audioUrl`: S3 URL of the uploaded audio file
+- `duration`: Audio duration in seconds
+- `isPublic`: Privacy setting
+- `tags`: Array of tags
+- `playCount`: Number of times played
+- `likeCount`: Number of likes
+- `createdAt`: Creation timestamp
+- `updatedAt`: Last update timestamp

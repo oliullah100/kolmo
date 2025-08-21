@@ -271,6 +271,41 @@ const updateProfile = z.object({
   }),
 });
 
+// Post profile record with audio schema
+const postProfileRecord = z.object({
+  body: z.object({
+    title: z.string({
+      required_error: 'Title is required',
+    }).min(1, 'Title cannot be empty').max(100, 'Title cannot exceed 100 characters').optional(),
+    description: z.string({
+      required_error: 'Description is required',
+    }).min(1, 'Description cannot be empty').max(500, 'Description cannot exceed 500 characters').optional(),
+    duration: z.union([
+      z.number().min(1, 'Duration must be at least 1 second').max(600, 'Duration cannot exceed 10 minutes'),
+      z.string().transform((val) => {
+        const num = parseInt(val);
+        if (isNaN(num)) {
+          throw new Error('Duration must be a valid number');
+        }
+        return num;
+      }).pipe(z.number().min(1, 'Duration must be at least 1 second').max(600, 'Duration cannot exceed 10 minutes'))
+    ], {
+      required_error: 'Audio duration is required',
+    }),
+    isPublic: z.union([
+      z.boolean(),
+      z.string().transform((val) => {
+        if (val === 'true') return true;
+        if (val === 'false') return false;
+        throw new Error('isPublic must be true or false');
+      })
+    ], {
+      required_error: 'Public visibility setting is required',
+    }).default(true),
+    tags: z.array(z.string()).max(10, 'Cannot have more than 10 tags').optional(),
+  }),
+});
+
 export const authValidation = {
   // Registration flow
   registerWithEmail,
@@ -302,4 +337,5 @@ export const authValidation = {
   
   // Profile management
   updateProfile,
+  postProfileRecord,
 }; 

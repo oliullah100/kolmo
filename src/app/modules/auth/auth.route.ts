@@ -127,6 +127,22 @@ router.post(
   AuthControllers.uploadAudioFile
 );
 
+// New endpoint for posting user profile records with audio
+router.post(
+  '/profile/post-record',
+  auth(),
+  fileUploader.uploadAudio,
+  validateRequest(authValidation.postProfileRecord),
+  AuthControllers.postProfileRecord
+);
+
+// Get profile records (public and user's own)
+router.get(
+  '/profile/records',
+  auth(),
+  AuthControllers.getProfileRecords
+);
+
 // Login routes
 router.post(
   '/login',

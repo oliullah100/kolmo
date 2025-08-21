@@ -1132,6 +1132,184 @@ const getUserProfile = async (userId: string) => {
   };
 };
 
+// Post profile record with audio
+const postProfileRecord = async (userId: string, payload: {
+  title: string;
+  description: string;
+  duration: number;
+  isPublic: boolean;
+  tags?: string[];
+}, file: Express.Multer.File) => {
+  // Validate audio file
+  const allowedMimeTypes = [
+    'audio/mpeg', 
+    'audio/mp3', 
+    'audio/mp4',
+    'audio/wav', 
+    'audio/wave',
+    'audio/x-wav',
+    'audio/m4a', 
+    'audio/aac',
+    'audio/x-m4a',
+    'audio/3gpp',
+    'audio/3gpp2',
+    'audio/ogg',
+    'audio/webm'
+  ];
+  
+  const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm'];
+  const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+  
+  if (!allowedMimeTypes.includes(file.mimetype) && !allowedExtensions.includes(fileExtension)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid audio file type. Allowed: MP3, WAV, M4A, AAC, OGG, WEBM");
+  }
+
+  // Check file size (max 15MB for profile records)
+  const maxSize = 15 * 1024 * 1024; // 15MB
+  if (file.size > maxSize) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio file size must be less than 15MB");
+  }
+
+  // Validate duration
+  if (payload.duration < 1 || payload.duration > 600) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Audio duration must be between 1-600 seconds");
+  }
+
+  let audioUrl: string;
+
+  try {
+    // Upload to S3
+    const uploadResult = await S3Uploader.uploadToS3(file, 'profile-records');
+    audioUrl = uploadResult.Location;
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to upload audio file");
+  }
+
+  // Create profile record
+  const profileRecord = await prisma.profileRecord.create({
+    data: {
+      userId: userId,
+      title: payload.title,
+      description: payload.description,
+      audioUrl: audioUrl,
+      duration: payload.duration,
+      isPublic: payload.isPublic,
+      tags: payload.tags || [],
+      playCount: 0,
+      likeCount: 0,
+    },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      audioUrl: true,
+      duration: true,
+      isPublic: true,
+      tags: true,
+      playCount: true,
+      likeCount: true,
+      createdAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          mainProfilePhoto: true,
+        }
+      }
+    },
+  });
+
+  return {
+    profileRecord,
+    message: "Profile record posted successfully",
+  };
+};
+
+// Get profile records
+const getProfileRecords = async (userId: string, query: any) => {
+  const { page = 1, limit = 10, userId: targetUserId } = query;
+  const skip = (Number(page) - 1) * Number(limit);
+
+  // Build where clause
+  const whereClause: any = {
+    OR: [
+      { isPublic: true }, // Public records
+      { userId: userId }  // User's own records
+    ]
+  };
+
+  // If specific user ID is provided, filter by that user
+  if (targetUserId) {
+    whereClause.userId = targetUserId;
+  }
+
+  const [profileRecords, total, currentUser] = await Promise.all([
+    prisma.profileRecord.findMany({
+      where: whereClause,
+      skip,
+      take: Number(limit),
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        audioUrl: true,
+        duration: true,
+        isPublic: true,
+        tags: true,
+        playCount: true,
+        likeCount: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            mainProfilePhoto: true,
+          }
+        }
+      },
+    }),
+    prisma.profileRecord.count({
+      where: whereClause,
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        voiceIntroduction: true,
+        voiceIntroductionDuration: true,
+        mainProfilePhoto: true,
+      },
+    }),
+  ]);
+
+  const totalPages = Math.ceil(total / Number(limit));
+
+  const response: any = {
+    userVoiceIntroduction: currentUser ? {
+      id: currentUser.id,
+      name: currentUser.name,
+      voiceIntroduction: currentUser.voiceIntroduction,
+      voiceIntroductionDuration: currentUser.voiceIntroductionDuration,
+      mainProfilePhoto: currentUser.mainProfilePhoto,
+    } : null,
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages,
+    },
+  };
+
+  // Only include profileRecords if there are records
+  if (profileRecords.length > 0) {
+    response.profileRecords = profileRecords;
+  }
+
+  return response;
+};
+
 export const AuthServices = {
   // Registration flow
   registerWithEmail,
@@ -1165,4 +1343,6 @@ export const AuthServices = {
   // Profile management
   updateProfile,
   getUserProfile,
+  postProfileRecord,
+  getProfileRecords,
 };
